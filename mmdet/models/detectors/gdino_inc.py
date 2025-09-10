@@ -265,6 +265,9 @@ class GroundingDINO_inc(GroundingDINO):
         # NOTE DINO calculates encoder losses on scores and coordinates
         # of selected top-k encoder queries, while DeformDETR is of all
         # encoder queries.
+        
+        if query_distn is None:
+            query_distn = Config._dict_to_config_dict_lazy(dict(type='None'))
 
         if self.training or query_distn.type != 'None':
             head_inputs_dict = dict(enc_outputs_class=topk_score, enc_outputs_coord=topk_coords, 
