@@ -1,20 +1,28 @@
-# Gate Experiment gate-v1 (ABANDONED)
+# Gate v1: Original Old-Class Gate (bias=2.0, LN after gate)
 
-## Status: ❌ Failed
+## Status: ❌ Failed (ori_ap collapsed from 0.465 → 0.298)
 
-## What was attempted
-Learned spatial gate: gate = sigmoid(gate_net(memory))
-Used to selectively suppress Bilinear residual at old-class positions.
+## Architecture
+```
+R = W_out(W_m(M) * W_t(T_pool))
+R = R * sigmoid(gate_net(M))    # gate BEFORE LN
+R = LN(R)                         # LN AFTER gate
+M' = M + gamma * R
+```
 
-## Root cause of failure
-- sigmoid saturation at 0.88 → gradient factor 0.106
-- gate gradient ~1000x weaker than main model gradients  
-- gate_net 16K params cannot learn in 12 epochs
+## Bugs Identified
+1. **LN after gate**: LN normalizes per-token to norm=16, ERASING any gate effect.
+   Gate=0.88 → LN → norm=16. Gate=0.01 → LN → norm=16. Gate is useless.
+2. **init_std=0.1**: Without LN, R norm explodes to 448.
+3. **bias=2.0**: Sigmoid(2.0)=0.88, saturated. Gradient factor = 0.88×0.12 = 0.106.
 
-## Key findings
-- gate_bias_grad = 2.68e-3 (at loss~10) → per-step move = 1.3e-7
-- Even 100x LR would only move bias 0.16 units in 12 epochs
-- Non-learned threshold mask also infeasible (R norm doesn't encode selectivity)
+## Results (3 epoch)
+| | ori_ap | new_ap | mAP |
+|:--|:--|:--|:--|
+| Gate v1 | 0.298 | 0.317 | 0.300 |
+| Bilinear+LN (no gate) | 0.466 | 0.339 | 0.450 |
 
-## Decision
-Gate direction abandoned. Pivot to non-learned orthogonal projection (ortho-l1).
+## Key Insight
+- The gate had ZERO effect due to LN ordering.
+- This led to fixing LN→gate order in v2.
+- Also exposed the init_std problem that led to RMS.
